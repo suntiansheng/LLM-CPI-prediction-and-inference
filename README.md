@@ -1,6 +1,6 @@
 # Project Code for [LLM-Powered CPI Prediction Inference with Online Text Time Series]
 
-This repository contains the R scripts and RMarkdown files used for the figures, real data analysis, and simulations in the paper **[LLM-Powered CPI Prediction Inference with Online Text Time Series]**. Below is an overview of the files and their purposes.
+This repository contains the R scripts and RMarkdown files used for the figures, real data analysis, and simulations in the paper **[LLM-Powered CPI Prediction Inference with Online Text Time Series]**. Below is an overview of the files and their purposes in `LLM-CPI code.zip'.
 
 ---
 
@@ -22,9 +22,5 @@ This folder includes the scripts for real data analysis.
 
 ### **3. Simulation**
 This folder contains all R scripts used for the simulations described in **Section 4** of the paper.
-
-#### **Correctly Specified Case**
-- `true_model_simulation.R`: R script for point prediction and interval prediction under the true model.
-- `true_model_simulation.R`: R script for point prediction and interval prediction under the true model.
 
 ---
