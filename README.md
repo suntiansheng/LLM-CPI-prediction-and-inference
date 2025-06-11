@@ -23,6 +23,8 @@ This folder includes the scripts for real data analysis.
 ### **3. Simulation**
 This folder contains all R scripts used for the simulations described in **Section 4** of the paper.
 
+---
+
 ### **4. Data**
 - `meanTopicDistri_mergeCPI100_Unemployment_df19-23_20250301.csv`: LDA embedding
 - `meanVector_mergeCPI_df19-23_20250201.csv`: BERT embedding
