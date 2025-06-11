@@ -1,0 +1,61 @@
+
+Attaching package: 'dplyr'
+
+The following objects are masked from 'package:stats':
+
+    filter, lag
+
+The following objects are masked from 'package:base':
+
+    intersect, setdiff, setequal, union
+
+Registered S3 method overwritten by 'quantmod':
+  method            from
+  as.zoo.data.frame zoo 
+
+Attaching package: 'lubridate'
+
+The following objects are masked from 'package:base':
+
+    date, intersect, setdiff, union
+
+Loading required package: Matrix
+
+Attaching package: 'expm'
+
+The following object is masked from 'package:Matrix':
+
+    expm
+
+
+Attaching package: 'MASS'
+
+The following object is masked from 'package:dplyr':
+
+    select
+
+Warning message:
+There was 1 warning in `summarise()`.
+i In argument: `across(everything(), mean, na.rm = TRUE)`.
+i In group 1: `month = "2019-01"`.
+Caused by warning:
+! The `...` argument of `across()` is deprecated as of dplyr 1.1.0.
+Supply arguments directly to `.fns` through an anonymous function instead.
+
+  # Previously
+  across(a:b, mean, na.rm = TRUE)
+
+  # Now
+  across(a:b, \(x) mean(x, na.rm = TRUE)) 
+Loading required package: iterators
+Loading required package: parallel
+Loading required package: rngtools
+Warning messages:
+1: In e$fun(obj, substitute(ex), parent.frame(), e$data) :
+  already exporting variable(s): generate_arx_data, check_coverage, Prediction_BJ, Bootstrap_powered_ts, X_m, X_select, strong_idx, p1, p2, h_c, rho_c
+2: In e$fun(obj, substitute(ex), parent.frame(), e$data) :
+  already exporting variable(s): generate_arx_data, check_coverage, Prediction_BJ, Bootstrap_powered_ts, X_m, X_select, strong_idx, p1, p2, h_c, rho_c
+3: In e$fun(obj, substitute(ex), parent.frame(), e$data) :
+  already exporting variable(s): generate_arx_data, check_coverage, Prediction_BJ, Bootstrap_powered_ts, X_m, X_select, strong_idx, p1, p2, h_c, rho_c
+4: In e$fun(obj, substitute(ex), parent.frame(), e$data) :
+  already exporting variable(s): generate_arx_data, check_coverage, Prediction_BJ, Bootstrap_powered_ts, X_m, X_select, strong_idx, p1, p2, h_c, rho_c
