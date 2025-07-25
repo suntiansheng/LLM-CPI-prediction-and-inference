@@ -104,6 +104,39 @@ powered_lda_interval_fit <- Prediction_BJ(X_m, y, tilde_y_m, p1, p2, obs_idx, te
 LLM_prediction <- powered_lda_interval_fit[[1]]
 LLM_interval <- powered_lda_interval_fit$interval
 
+dates <- seq.Date(from = as.Date("2019-01-01"), 
+                  to = as.Date("2023-12-01"), 
+                  by = "month")
+n <- length(dates)
+actual <- y
+
+# Create a data frame
+ts_data <- data.frame(
+  Date = dates,
+  Actual = actual
+)
+
+forecast_start_date <- dates[max(obs_idx)+1]
+
+
+## Combine all data
+ts_data <- ts_data %>%
+  mutate(
+    # AR
+    AR_fit = ifelse(Date >= forecast_start_date, ar_prediction, NA),
+    AR_lwr = ifelse(Date >= forecast_start_date, ar_interval[,1], NA),
+    AR_upr = ifelse(Date >= forecast_start_date, ar_interval[,2], NA),
+    
+    # ARX
+    ARX_fit = ifelse(Date >= forecast_start_date, ar_unem_predictions, NA),
+    ARX_lwr = ifelse(Date >= forecast_start_date, ar_unem_interval[,1], NA),
+    ARX_upr = ifelse(Date >= forecast_start_date, ar_unem_interval[,2], NA),
+    
+    #LLM
+    LLM_fit = ifelse(Date >= forecast_start_date, LLM_prediction, NA),
+    LLM_lwr = ifelse(Date >= forecast_start_date, LLM_interval[,1], NA),
+    LLM_upr = ifelse(Date >= forecast_start_date, LLM_interval[,2], NA)
+  )
 
 ############### Density plot #####################
 # Load required libraries
