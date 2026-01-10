@@ -58,3 +58,7 @@ accessed under platform terms. Because the WSJ terms of use may treat certain
 derived data sets (e.g., embeddings) as reproductions, creating potential legal
 uncertainty, we do not share the WSJ data. We release only non-expressive
 derived data sets from Weibo to support reproducibility.
+
+## Dataset License
+The dataset files in `weibo-short-version-release/` are governed by
+`DATASET_LICENSE.md` and require contacting the author before publication use.
