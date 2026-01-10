@@ -1,6 +1,6 @@
 Dataset License (Weibo Release Data)
 
-Copyright (c) 2025 Ao Sun
+Copyright (c) 2025 Yingying Fan, Jinchi Lv, Ao Sun and Yurou Wang
 
 This license applies only to the dataset files under `weibo-short-version-release/`.
 
