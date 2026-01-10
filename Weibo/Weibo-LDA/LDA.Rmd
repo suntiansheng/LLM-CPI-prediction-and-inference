@@ -1,0 +1,414 @@
+---
+title: "Real Data Analysis"
+date: "2025-12-01"
+author: "Yingying Fan, Jinchi Lv, Ao Sun and Yurou Wang"
+output:
+  prettydoc::html_pretty:
+    theme: hpstr
+    highlight: github
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+source("./utility.R")
+library(lubridate)
+set.seed(2025)
+
+
+Average_prediction <- function(y, H) {
+  sapply(seq_len(H), function(h) mean(tail(y, h)))
+}
+
+check_coverage <- function(interval_row, true_val) {
+  as.integer(true_val >= interval_row[1] & true_val <= interval_row[2])
+}
+```
+
+## LLM-Powered Prediction with LDA Embedding 
+```{r}
+
+df <- read.csv("./lda_final.csv")
+```
+
+### Data preprocessing
+```{r}
+
+topic_cols <- names(df)[grepl("^X\\d+$|^\\d+$", names(df))]
+stopifnot("No topic columns found" = length(topic_cols) > 0)
+unem_col <- "unem"
+has_unem <- TRUE
+
+
+df_new <- df %>%
+  mutate(
+    time = as.Date(time),
+    unem = .data[[unem_col]],
+    cpi = cpi_lastmonth_100,
+    month = format(time, "%Y-%m"),
+    day = lubridate::day(time),
+    period = case_when(
+      day <= 10 ~ "up",
+      day <= 20 ~ "middle",
+      TRUE ~ "down"
+    )
+  ) %>%
+  select(month, period, aveScore, all_of(topic_cols), unem, cpi)
+
+
+df_summary <- df_new %>%
+  group_by(month, period) %>%
+  summarise(across(everything(), ~ mean(.x, na.rm = TRUE)), .groups = "drop")
+
+y_m_list <- sort(unique(df_summary$month))
+month_dates <- as.Date(paste0(y_m_list, "-01"))
+
+
+topic_cols_summary <- intersect(topic_cols, names(df_summary))
+X_m <- df_summary %>%
+  group_by(month) %>%
+  summarise(across(all_of(topic_cols_summary), ~ mean(.x, na.rm = TRUE)), .groups = "drop") %>%
+  arrange(month) %>%
+  select(-month) %>%
+  as.matrix()
+
+X_m <- scale(X_m)
+
+y <- df_new %>%
+  group_by(month) %>%
+  summarise(y = mean(cpi, na.rm = TRUE), .groups = "drop") %>%
+  arrange(month) %>%
+  pull(y)
+
+
+y <- scale(y - 100)
+
+
+y_m_list <- sort(unique(df_summary$month))
+tilde_y_m <- matrix(ncol = 3, nrow = length(y_m_list))
+for(i in seq_along(y_m_list)){
+  res_ym <- y_m_list[i]
+  tilde_y_m[i,] <- df_summary[df_summary$month == res_ym, "aveScore", drop = TRUE]
+}
+
+unem <- df_new %>%
+  group_by(month) %>%
+  summarise(y = mean(unem, na.rm = TRUE), .groups = "drop") %>%
+  arrange(month) %>%
+  pull(y)
+unem <- scale(unem)
+
+```
+
+### Data analysis
+
+#### Variable Selection via correlation pursuit
+```{r}
+
+EOD <- max(which(month_dates < as.Date("2024-07-01"))) 
+sel <- tryCatch(select_topics_predictive(y, X_m, train_idx = 1:EOD,
+                                         max_topics = 2, min_train = 24),
+                error = function(e) list(selected = character()))
+strong_idx <- match(sel$selected, colnames(X_m))
+strong_idx <- strong_idx[!is.na(strong_idx)]
+strong_idx
+```
+
+
+#### Prediction
+```{r}
+h_pred <- seq(8,15,1)
+nf_files <- file.path("nf_results", paste0("no_unem_h", h_pred, ".json"))
+if (!all(file.exists(nf_files))) {
+  stop("Missing nf_results/no_unem_h*.json files; run run_nf_gpu_all.sh first.")
+}
+nf_list <- lapply(nf_files, jsonlite::fromJSON)
+
+Res_m <- matrix(nrow = length(h_pred), ncol = 20)
+for(k in seq_along(h_pred)){
+  h <- h_pred[k]
+  res_c <- NULL
+  test_idx <- (length(y) - h + 1):length(y)
+  obs_idx <- setdiff(seq_along(y), test_idx)
+  
+
+  ar_base <- tryCatch(auto.arima(y[obs_idx],max.q = 0, D = 0,seasonal = FALSE, allowmean = FALSE, allowdrift = FALSE),
+                      error = function(e) list(arma = c(1,0,0)))
+  ar_fit <- arima(y[obs_idx], order = c(ar_base$arma[1],0,0), include.mean = FALSE)
+  ar_prediction <- predict(ar_fit, n.ahead = h)$pred
+  res_c <- c(res_c, sqrt(mean((ar_prediction-y[test_idx])^2)))
+  res_c <- c(res_c, mean(sign(ar_prediction) !=sign(y[test_idx])))
+  
+
+  mean_prediction <- rep(y[max(obs_idx)], length(test_idx))
+ res_c <- c(res_c, sqrt(mean((mean_prediction-y[test_idx])^2)))
+  res_c <- c(res_c, mean(sign(mean_prediction) !=sign(y[test_idx])))
+  
+
+  ave_prediction <- Average_prediction(y[obs_idx], length(test_idx))
+  res_c <- c(res_c, sqrt(mean((ave_prediction-y[test_idx])^2)))
+  res_c <- c(res_c, mean(sign(ave_prediction) !=sign(y[test_idx])))
+  
+
+  ar_unem_base <- tryCatch(auto.arima(y[obs_idx], xreg = unem[obs_idx], max.q = 0, D = 0,seasonal = FALSE, allowmean = FALSE,      allowdrift = FALSE),
+                           error = function(e) list(arma = c(1,0,0)))
+  ar_unem_fit <- arima(y[obs_idx], xreg = unem[obs_idx], order = c(ar_unem_base$arma[1],0,0), include.mean = FALSE)
+  ar_unem_prediction <- predict(ar_unem_fit, newxreg = unem[test_idx], n.ahead = h)$pred
+  
+  res_c <- c(res_c, sqrt(mean((ar_unem_prediction-y[test_idx])^2)))
+  res_c <- c(res_c, mean(sign(ar_unem_prediction) !=sign(y[test_idx])))
+
+
+  arx_fit <- arima(y[obs_idx], order = c(ar_base$arma[1],0,0), xreg = X_m[obs_idx,strong_idx, drop = FALSE], include.mean = FALSE)
+  arx_predictions <- predict(arx_fit, n.ahead = h, newxreg = X_m[test_idx,strong_idx, drop = FALSE])$pred
+  
+  res_c <- c(res_c, sqrt(mean((arx_predictions-y[test_idx])^2)))
+  res_c <- c(res_c, mean(sign(arx_predictions) !=sign(y[test_idx])))
+  
+
+  arx_unem_fit <- arima(y[obs_idx],order = c(max(1, ar_base$arma[1]),0,0), xreg = cbind(X_m[obs_idx,strong_idx, drop=FALSE],unem[obs_idx]),    include.mean = FALSE)
+  arx_unem_predictions <-predict(arx_unem_fit, n.ahead=h, newxreg=cbind(X_m[test_idx,strong_idx,drop=FALSE],  unem[test_idx]))$pred
+
+  res_c <- c(res_c, sqrt(mean((arx_unem_predictions-y[test_idx])^2)))
+  res_c <- c(res_c, mean(sign(arx_unem_predictions) !=sign(y[test_idx])))
+
+
+  p1=ar_base$arma[1]
+  p2=1
+  
+  powered_prediction <- LLM_TS.Predict(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, strong_idx, h)
+
+  res_c <- c(res_c, sqrt(mean((powered_prediction-y[test_idx])^2)))
+  res_c <- c(res_c, mean(sign(powered_prediction) !=sign(y[test_idx])))
+  
+
+  powered_unem_prediction <- LLM_TS.Predict(cbind(X_m,unem), y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+                                            c(strong_idx,ncol(X_m)+1), h)
+
+  
+  res_c <- c(res_c, sqrt(mean((powered_unem_prediction-y[test_idx])^2)))
+  res_c <- c(res_c, mean(sign(powered_unem_prediction) !=sign(y[test_idx])))
+
+
+  time_llm_prediction <- nf_list[[k]]$results$TimeLLM$pred
+  res_c <- c(res_c, sqrt(mean((time_llm_prediction-y[test_idx])^2)))
+  res_c <- c(res_c, mean(sign(time_llm_prediction) !=sign(y[test_idx])))
+
+
+  patchtst_prediction <- nf_list[[k]]$results$PatchTST$pred
+  res_c <- c(res_c, sqrt(mean((patchtst_prediction-y[test_idx])^2)))
+  res_c <- c(res_c, mean(sign(patchtst_prediction) !=sign(y[test_idx])))
+  Res_m[k,] <- res_c
+}
+```
+
+```{r}
+LDA_mse <- Res_m[,seq(1, ncol(Res_m), 2)]
+LDA_sign <- Res_m[,seq(2, ncol(Res_m), 2)]
+colnames(LDA_mse) <- c('AR','RW','AVE','AR+unem','LDA','LDA+unem','LLM+LDA','LLM+LDA+unem',
+                       'TimeLLM','PatchTST')
+colnames(LDA_sign) <- c('AR','RW','AVE','AR+unem','LDA','LDA+unem','LLM+LDA','LLM+LDA+unem',
+                        'TimeLLM','PatchTST')
+```
+
+
+
+### Prediction interval with LDA embedding
+```{r}
+h_pi <- seq(8,15,1)
+
+source("./SPI.R")
+
+coverage_m <- matrix(NA, nrow = length(h_pi), ncol = 10)
+len_m <- matrix(NA, nrow = length(h_pi), ncol = 10)
+
+for(k in seq_along(h_pi)){
+  h <- h_pi[k]
+  
+  test_idx <- (length(y) - h + 1):length(y)
+  obs_idx <- setdiff(seq_along(y), test_idx)
+  
+
+  ar_base <- tryCatch(auto.arima(y[obs_idx], max.q = 0, D = 0, seasonal = FALSE, allowmean = FALSE, allowdrift = FALSE),
+                      error = function(e) list(arma = c(1,0,0)))
+  ar_fit <- Arima(y[obs_idx], order = c(ar_base$arma[1],0,0),include.mean = FALSE)
+  ar_predictions_fit <- forecast(ar_fit, h = length(test_idx))
+  ar_interval <- cbind(ar_predictions_fit$lower[,2], ar_predictions_fit$upper[,2])
+  len_m[k, 1] <- mean(as.numeric(ar_interval[,2] - ar_interval[,1]))
+  coverage_m[k,1] <- mean(mapply(check_coverage, split(ar_interval, row(ar_interval)), y[test_idx]))
+  
+
+  if (has_unem) {
+    ar_unem_fit <- Arima(y[obs_idx], order = c(ar_base$arma[1],0,0), xreg = unem[obs_idx], include.mean = FALSE)
+    ar_unem_predictions_fit <- forecast(ar_unem_fit, h = length(test_idx), xreg = unem[test_idx])
+    ar_unem_interval <- cbind(ar_unem_predictions_fit$lower[,2], ar_unem_predictions_fit$upper[,2])
+    len_m[k, 2] <- mean(as.numeric(ar_unem_interval[,2] - ar_unem_interval[,1]))
+    coverage_m[k,2] <- mean(mapply(check_coverage, split(ar_unem_interval, row(ar_unem_interval)), y[test_idx]))
+  } else {
+    len_m[k,2] <- NA
+    coverage_m[k,2] <- NA
+  }
+  
+ 
+  
+
+  
+  arx_lda_fit <- Arima(y[obs_idx], order = c(ar_base$arma[1],0,0), xreg = X_m[obs_idx,strong_idx,drop = FALSE], include.mean = FALSE)
+  arx_lda_predictions_fit <- forecast(arx_lda_fit, h = length(test_idx), xreg = X_m[test_idx,strong_idx,drop = FALSE])
+  arx_lda_interval <- cbind(arx_lda_predictions_fit$lower[,2], arx_lda_predictions_fit$upper[,2])
+  
+  len_m[k,3] <- mean(arx_lda_interval[,2] - arx_lda_interval[,1])
+  coverage_m[k,3] <- mean(mapply(check_coverage, split(arx_lda_interval, row(arx_lda_interval)), y[test_idx]))
+  
+
+  if (has_unem) {
+     arx_lda_un_fit <- Arima(y[obs_idx], order = c(ar_fit$arma[1],0,0), xreg = cbind(X_m[obs_idx,strong_idx, drop=FALSE], unem[obs_idx]), include.mean = FALSE)
+    arx_lda_un_predictions_fit <- forecast(arx_lda_un_fit, h = length(test_idx), xreg = cbind(X_m[test_idx,strong_idx,drop=FALSE], unem[test_idx]))
+    arx_lda_un_interval <- cbind(arx_lda_un_predictions_fit$lower[,2], arx_lda_un_predictions_fit$upper[,2])
+    
+    len_m[k,4] <- mean(arx_lda_un_interval[,2] - arx_lda_un_interval[,1])
+    coverage_m[k,4] <- mean(mapply(check_coverage, split(arx_lda_un_interval, row(arx_lda_un_interval)), y[test_idx]))
+  } else {
+    len_m[k,4] <- NA
+    coverage_m[k,4] <- NA
+  }
+  
+
+  p1=ar_base$arma[1]
+  p2=1
+  powered_lda_interval <- LLM_TS.BJ(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+                                            strong_idx, h)$interval
+  len_m[k,5] <- mean(powered_lda_interval[,2] - powered_lda_interval[,1])
+  coverage_m[k,5] <- mean(mapply(check_coverage, split(powered_lda_interval, row(powered_lda_interval)), y[test_idx]))
+  
+
+  boot_lda_interval <- LLM_TS.BOOT(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, strong_idx, h, B=2000)$interval
+  
+  len_m[k,6] <- mean(boot_lda_interval[,2] - boot_lda_interval[,1])
+  coverage_m[k,6] <- mean(mapply(check_coverage, split(boot_lda_interval, row(boot_lda_interval)), y[test_idx]))
+  
+
+
+  if (has_unem) {
+    powered_interval <- LLM_TS.BJ(cbind(X_m,unem), y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+                                      c(strong_idx,ncol(X_m)+1), h)$interval
+    len_m[k,7] <- mean(powered_interval[,2] - powered_interval[,1])
+    coverage_m[k,7] <- mean(mapply(check_coverage, split(powered_interval, row(powered_interval)), y[test_idx]))
+  } else {
+    len_m[k,7] <- NA
+    coverage_m[k,7] <- NA
+  }
+  
+
+
+  if (has_unem) {
+    boot_interval <- LLM_TS.BOOT(cbind(X_m,unem), y, tilde_y_m, p1, p2, obs_idx, test_idx, c(strong_idx,ncol(X_m)+1), h, B = 2000)$interval
+     
+    len_m[k,8] <- mean(boot_interval[,2] - boot_interval[,1])
+    coverage_m[k,8] <- mean(mapply(check_coverage, split(boot_interval, row(boot_interval)), y[test_idx]))
+  } else {
+    len_m[k,8] <- NA
+    coverage_m[k,8] <- NA
+  }
+}
+
+```
+
+```{r}
+spi_res <- spi_multi_horizon(
+  y = y,
+  X_m = X_m,
+  tilde_y_m = tilde_y_m,
+  strong_idx = strong_idx,
+  h_vec = h_pi,
+  unem = unem,
+  has_unem = has_unem,
+  cal_frac = 0.2,
+  alpha = 0.05,
+  p2 = 1
+)
+
+coverage_m[,9] <- spi_res$coverage_without_unem
+len_m[,9] <- spi_res$length_without_unem
+coverage_m[,10] <- spi_res$coverage_with_unem
+len_m[,10] <- spi_res$length_with_unem
+```
+
+```{r}
+LDA_cov <- coverage_m
+colnames(LDA_cov) <- c('AR','AR+unem','LDA', 'LDA+unem', 'LLM+LDA(BJ)','LLM+LDA(Boot)','LLM+LDA+unem(BJ)','LLM+LDA+unem(Boot)','LLM+LDA(SPI)','LLM+LDA+unem(SPI)')
+LDA_len <- len_m
+colnames(LDA_len) <- c('AR','AR+unem','LDA', 'LDA+unem', 'LLM+LDA(BJ)','LLM+LDA(Boot)','LLM+LDA+unem(BJ)','LLM+LDA+unem(Boot)','LLM+LDA(SPI)','LLM+LDA+unem(SPI)')
+```
+
+## Prediction results
+
+### Results without unemployment rate 
+```{r}
+MSE_without_unem <- LDA_mse[,c('AR','RW','AVE','LDA','LLM+LDA','TimeLLM','PatchTST')]
+rMSE_without_unem <- sweep(MSE_without_unem, 1, MSE_without_unem[,'AR',drop=FALSE], "/")
+rMSE_without_unem <- cbind(h_pred, rMSE_without_unem)
+knitr::kable(rMSE_without_unem,col.names = c('H','AR','RW','AVE','LDA','LLM+LDA','TimeLLM','PatchTST'), digits = 3, caption = 'Cumulative rPMSE without unemployment rate')
+colMeans(rMSE_without_unem[,-1, drop = FALSE])
+```
+
+
+
+```{r}
+Sign_without_unem <- LDA_sign[,c('AR','RW','AVE','LDA','LLM+LDA','TimeLLM','PatchTST')]
+rSign_without_unem <- sweep(Sign_without_unem, 1, Sign_without_unem[,'AR',drop=FALSE], "/")
+rSign_without_unem <- cbind(h_pred, rSign_without_unem)
+knitr::kable(rSign_without_unem,col.names = c('H','AR','RW','AVE','LDA','LLM+LDA','TimeLLM','PatchTST'), digits = 3, caption = 'Cumulative rSign without unemployment rate')
+colMeans(rSign_without_unem[,-1, drop = FALSE])
+```
+
+### Results with unemployment rate 
+```{r}
+MSE_with_unem <- LDA_mse[,c('AR+unem','RW','AVE','LDA+unem','LLM+LDA+unem')]
+rMSE_with_unem <- sweep(MSE_with_unem, 1, MSE_with_unem[,'AR+unem',drop=FALSE], "/")
+rMSE_with_unem <- cbind(h_pred, rMSE_with_unem)
+knitr::kable(rMSE_with_unem,col.names = c('H','AR+unem','RW','AVE','LDA+unem','LLM+LDA+unem'), digits = 3, caption = 'Cumulative rPMSE with unemployment rate')
+colMeans(rMSE_with_unem[,-1, drop = FALSE])
+```
+
+
+```{r}
+Sign_with_unem <- LDA_sign[,c('AR+unem','RW','AVE','LDA+unem','LLM+LDA+unem')]
+rSign_with_unem <- sweep(Sign_with_unem, 1, Sign_with_unem[,'AR+unem',drop=FALSE], "/")
+rSign_with_unem <- cbind(h_pred, rSign_with_unem)
+knitr::kable(rSign_with_unem,col.names = c('H','AR+unem','RW','AVE','LDA+unem','LLM+LDA+unem'), digits = 3, caption = 'Cumulative rSign with unemployment rate')
+colMeans(rSign_with_unem[,-1, drop = FALSE])
+```
+
+
+## Inference results
+
+### Results without unemployment rate 
+```{r}
+Cov_without_unem <- LDA_cov[,c('AR','LDA','LLM+LDA(BJ)','LLM+LDA(Boot)','LLM+LDA(SPI)')]
+Cov_without_unem <- cbind(h_pi, Cov_without_unem)
+knitr::kable(Cov_without_unem, col.names = c('H','AR','LDA','LLM+LDA(BJ)','LLM+LDA(Boot)','LLM+LDA(SPI)'), digits = 3, caption = 'Coverage rate without unemployment rate')
+```
+
+
+```{r}
+Len_without_unem <- LDA_len[,c('AR','LDA','LLM+LDA(BJ)','LLM+LDA(Boot)','LLM+LDA(SPI)')]
+Len_without_unem <- cbind(h_pi, Len_without_unem)
+knitr::kable(Len_without_unem, col.names = c('H','AR','LDA','LLM+LDA(BJ)','LLM+LDA(Boot)','LLM+LDA(SPI)'), digits = 3, caption = 'Interval length without unemployment rate')
+```
+
+### Results with unemployment rate 
+```{r}
+Cov_with_unem <- LDA_cov[,c('AR+unem','LDA+unem','LLM+LDA+unem(BJ)','LLM+LDA+unem(Boot)','LLM+LDA+unem(SPI)')]
+Cov_with_unem <- cbind(h_pi, Cov_with_unem)
+knitr::kable(Cov_with_unem, col.names = c('H','AR+unem','LDA+unem','LLM+LDA+unem(BJ)','LLM+LDA+unem(Boot)','LLM+LDA+unem(SPI)'), digits = 3, caption = 'Coverage rate with unemployment rate')
+```
+
+```{r}
+Len_with_unem <- LDA_len[,c('AR+unem','LDA+unem','LLM+LDA+unem(BJ)','LLM+LDA+unem(Boot)','LLM+LDA+unem(SPI)')]
+Len_with_unem <- cbind(h_pi, Len_with_unem)
+knitr::kable(Len_with_unem, col.names = c('H','AR+unem','LDA+unem','LLM+LDA+unem(BJ)','LLM+LDA+unem(Boot)','LLM+LDA+unem(SPI)'), digits = 3, caption = 'Interval length with unemployment rate')
+```

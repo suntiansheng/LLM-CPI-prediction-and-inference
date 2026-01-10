@@ -1,0 +1,278 @@
+---
+title: "COVID Period Analysis: WSJ Topics"
+date: "2025-12-22"
+author: "Yingying Fan, Jinchi Lv, Ao Sun and Yurou Wang"
+output:
+  prettydoc::html_pretty:
+    theme: hpstr
+    highlight: github
+params:
+  topic_count: 10
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(lubridate)
+})
+source("./utility.R")
+```
+
+
+```{r}
+Average_prediction <- function(y, H) {
+  sapply(seq_len(H), function(h) mean(tail(y, h)))
+}
+
+prepare_monthly <- function(df, target_col = "CPIAUCSL") {
+  topic_cols <- names(df)[grepl("^topic_", names(df))]
+  if (!length(topic_cols)) {
+    stop("No topic columns found with prefix 'topic_'.")
+  }
+  if (!all(c("pred_score", target_col, "date") %in% names(df))) {
+    stop("Input data must include date, target, and pred_score.")
+  }
+
+  df <- df %>%
+    filter(
+      is.finite(.data$pred_score),
+      is.finite(.data[[target_col]]),
+      if_all(all_of(topic_cols), is.finite)
+    ) %>%
+    mutate(
+      date = as.Date(date),
+      month = format(date, "%Y-%m"),
+      day = day(date),
+      period = case_when(
+        day <= 15 ~ "p1",
+        TRUE ~ "p2"
+      ),
+      period = factor(period, levels = c("p1", "p2"))
+    )
+
+  df_summary <- df %>%
+    group_by(month, period) %>%
+    summarise(
+      across(all_of(c("pred_score", target_col, topic_cols)),
+             ~ mean(.x, na.rm = TRUE)),
+      .groups = "drop"
+    ) %>%
+    group_by(month) %>%
+    filter(n() == 2) %>%
+    ungroup() %>%
+    arrange(month, period)
+
+  y_m_list <- sort(unique(df_summary$month))
+
+  tilde_y_m <- matrix(ncol = 2, nrow = length(y_m_list))
+  for (i in seq_along(y_m_list)) {
+    res_ym <- y_m_list[i]
+    tilde_vals <- df_summary[df_summary$month == res_ym, "pred_score", drop = TRUE]
+    if (length(tilde_vals) < 2) {
+      tilde_vals <- c(tilde_vals, rep(NA_real_, 2 - length(tilde_vals)))
+    }
+    tilde_y_m[i, ] <- tilde_vals[1:2]
+  }
+  tilde_y_m <- scale(tilde_y_m)
+
+  X_m <- matrix(ncol = length(topic_cols), nrow = length(y_m_list))
+  for (i in seq_along(y_m_list)) {
+    res_ym <- y_m_list[i]
+    X_m[i, ] <- colMeans(
+      df_summary[df_summary$month == res_ym, topic_cols, drop = FALSE],
+      na.rm = TRUE
+    )
+  }
+  colnames(X_m) <- topic_cols
+
+  y_df <- df %>%
+    group_by(month) %>%
+    summarise(y = mean(.data[[target_col]], na.rm = TRUE), .groups = "drop") %>%
+    filter(month %in% y_m_list) %>%
+    arrange(month)
+  y_raw <- y_df$y
+  y_ratio <- c(1, y_raw[-1] / y_raw[-length(y_raw)])
+  y_center <- mean(y_ratio, na.rm = TRUE)
+  y_scale <- sd(y_ratio, na.rm = TRUE)
+  y <- (y_ratio - y_center) / y_scale
+
+  list(y = y, X_m = X_m, tilde_y_m = tilde_y_m)
+}
+
+run_period_models <- function(df, label, h_vec = 3:6, selection_gap = 6,
+                              target_col = "CPIAUCSL", max_topics = 1) {
+  prep <- prepare_monthly(df, target_col = target_col)
+  y <- prep$y
+  X_m <- prep$X_m
+  tilde_y_m <- prep$tilde_y_m
+
+  select_end <- length(y) - selection_gap
+  if (select_end < 5) {
+    stop("Not enough monthly points for selection in period: ", label)
+  }
+  sel <- select_topics_predictive(y, X_m, train_idx = 1:select_end, max_topics = max_topics)
+  strong_idx <- match(sel$selected, colnames(X_m))
+  strong_idx <- strong_idx[!is.na(strong_idx)]
+  if (!length(strong_idx)) {
+    strong_idx <- 1
+  }
+
+  rmse_mat <- matrix(NA_real_, nrow = length(h_vec), ncol = 3)
+  sign_mat <- matrix(NA_real_, nrow = length(h_vec), ncol = 3)
+  colnames(rmse_mat) <- c("AR", "LDA", "LLM-TS")
+  colnames(sign_mat) <- c("AR", "LDA", "LLM-TS")
+
+  for (k in seq_along(h_vec)) {
+    h <- h_vec[k]
+    test_idx <- (length(y) - h + 1):length(y)
+    obs_idx <- setdiff(seq_along(y), test_idx)
+
+    ar_base <- auto.arima(
+      y[obs_idx],
+      max.q = 0,
+      D = 0,
+      seasonal = FALSE,
+      allowmean = FALSE,
+      allowdrift = FALSE
+    )
+    p1 <- max(1, ar_base$arma[1])
+    ar_fit <- arima(y[obs_idx], order = c(p1, 0, 0), include.mean = FALSE)
+    ar_pred <- predict(ar_fit, n.ahead = h)$pred
+    rmse_mat[k, "AR"] <- sqrt(mean((ar_pred - y[test_idx])^2))
+    sign_mat[k, "AR"] <- mean(sign(ar_pred) != sign(y[test_idx]))
+
+    arx_fit <- arima(
+      y[obs_idx],
+      order = c(p1, 0, 0),
+      xreg = X_m[obs_idx, strong_idx, drop = FALSE],
+      include.mean = FALSE
+    )
+    arx_pred <- predict(
+      arx_fit,
+      n.ahead = h,
+      newxreg = X_m[test_idx, strong_idx, drop = FALSE]
+    )$pred
+    rmse_mat[k, "LDA"] <- sqrt(mean((arx_pred - y[test_idx])^2))
+    sign_mat[k, "LDA"] <- mean(sign(arx_pred) != sign(y[test_idx]))
+
+    llm_pred <- LLM_TS.Predict(
+      X_m,
+      y,
+      tilde_y_m,
+      p1,
+      p1,
+      obs_idx,
+      test_idx,
+      strong_idx,
+      h
+    )
+    rmse_mat[k, "LLM-TS"] <- sqrt(mean((llm_pred - y[test_idx])^2))
+    sign_mat[k, "LLM-TS"] <- mean(sign(llm_pred) != sign(y[test_idx]))
+  }
+
+  list(
+    rmse = data.frame(H = h_vec, rmse_mat, check.names = FALSE),
+    sign = data.frame(H = h_vec, sign_mat, check.names = FALSE),
+    selected_topics = colnames(X_m)[strong_idx]
+  )
+}
+
+load_period_data <- function(topic_path, base_df, target_col = "CPIAUCSL") {
+  topic_df <- read.csv(topic_path, stringsAsFactors = FALSE, check.names = FALSE)
+  topic_df$date <- as.Date(topic_df$date)
+  base_df$date <- as.Date(base_df$date)
+
+  base_keep <- base_df %>%
+    select(date, pred_score, all_of(target_col))
+
+  topic_df %>%
+    left_join(base_keep, by = "date") %>%
+    arrange(date)
+}
+
+target_col <- "CPIAUCSL"
+pre_topics <- 6
+covid_topics <- 8
+post_topics <- 6
+pre_max_topics <- 3
+covid_max_topics <- 1
+post_max_topics <- 1
+base_data_path <- "topics_with_pred_score_final.csv"
+base_df <- read.csv(base_data_path, stringsAsFactors = FALSE, check.names = FALSE)
+
+period_dirs <- list(
+  pre = "daily_topic_precovid",
+  covid = "daily_topic_Covid19",
+  post = "daily_topic_postCovid"
+)
+
+topic_file_path <- function(period_dir, k) {
+  file.path(period_dir, sprintf("daily_topic_%stopics.csv", k))
+}
+```
+
+```{r results='asis'}
+pre_path <- topic_file_path(period_dirs$pre, pre_topics)
+covid_path <- topic_file_path(period_dirs$covid, covid_topics)
+post_path <- topic_file_path(period_dirs$post, post_topics)
+
+pre_df <- load_period_data(pre_path, base_df, target_col = target_col)
+covid_df <- load_period_data(covid_path, base_df, target_col = target_col)
+post_df <- load_period_data(post_path, base_df, target_col = target_col)
+
+pre_res <- run_period_models(pre_df, "pre_covid", target_col = target_col, max_topics = pre_max_topics)
+covid_res <- run_period_models(covid_df, "covid", target_col = target_col, max_topics = covid_max_topics)
+post_res <- run_period_models(post_df, "post_covid", target_col = target_col, max_topics = post_max_topics)
+
+cat("### Pre-COVID period\n\n")
+cat("Selected topics: ", paste(pre_res$selected_topics, collapse = ", "), "\n\n")
+print(knitr::kable(pre_res$rmse, digits = 3, caption = "Root PMSE (pre-COVID)"))
+print(knitr::kable(pre_res$sign, digits = 3, caption = "Sign mismatch (pre-COVID)"))
+pre_rmse_avg <- data.frame(
+  Metric = "Average (H=3..6)",
+  colMeans(pre_res$rmse[, -1, drop = FALSE], na.rm = TRUE),
+  check.names = FALSE
+)
+pre_sign_avg <- data.frame(
+  Metric = "Average (H=3..6)",
+  colMeans(pre_res$sign[, -1, drop = FALSE], na.rm = TRUE),
+  check.names = FALSE
+)
+print(knitr::kable(pre_rmse_avg, digits = 3, caption = "Average Root PMSE (pre-COVID)"))
+print(knitr::kable(pre_sign_avg, digits = 3, caption = "Average Sign mismatch (pre-COVID)"))
+
+cat("\n### COVID period\n\n")
+cat("Selected topics: ", paste(covid_res$selected_topics, collapse = ", "), "\n\n")
+print(knitr::kable(covid_res$rmse, digits = 3, caption = "Root PMSE (COVID)"))
+print(knitr::kable(covid_res$sign, digits = 3, caption = "Sign mismatch (COVID)"))
+covid_rmse_avg <- data.frame(
+  Metric = "Average (H=3..6)",
+  colMeans(covid_res$rmse[, -1, drop = FALSE], na.rm = TRUE),
+  check.names = FALSE
+)
+covid_sign_avg <- data.frame(
+  Metric = "Average (H=3..6)",
+  colMeans(covid_res$sign[, -1, drop = FALSE], na.rm = TRUE),
+  check.names = FALSE
+)
+print(knitr::kable(covid_rmse_avg, digits = 3, caption = "Average Root PMSE (COVID)"))
+print(knitr::kable(covid_sign_avg, digits = 3, caption = "Average Sign mismatch (COVID)"))
+
+cat("\n### Post-COVID period\n\n")
+cat("Selected topics: ", paste(post_res$selected_topics, collapse = ", "), "\n\n")
+print(knitr::kable(post_res$rmse, digits = 3, caption = "Root PMSE (post-COVID)"))
+print(knitr::kable(post_res$sign, digits = 3, caption = "Sign mismatch (post-COVID)"))
+post_rmse_avg <- data.frame(
+  Metric = "Average (H=3..6)",
+  colMeans(post_res$rmse[, -1, drop = FALSE], na.rm = TRUE),
+  check.names = FALSE
+)
+post_sign_avg <- data.frame(
+  Metric = "Average (H=3..6)",
+  colMeans(post_res$sign[, -1, drop = FALSE], na.rm = TRUE),
+  check.names = FALSE
+)
+print(knitr::kable(post_rmse_avg, digits = 3, caption = "Average Root PMSE (post-COVID)"))
+print(knitr::kable(post_sign_avg, digits = 3, caption = "Average Sign mismatch (post-COVID)"))
+```

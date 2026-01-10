@@ -1,0 +1,276 @@
+---
+title: "PI Length & Coverage Comparison"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+```{r libs}
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(lubridate)
+  library(forecast)
+})
+set.seed(1234)
+source("./utility.R")
+source("./SPI.R")
+```
+
+```{r params}
+h <- 12
+topic_file <- "./topics_with_pred_score.csv"
+price_stock_targets <- c(
+  "WPSFD49207", "WPSFD49502", "PPICMM", "CPIAUCSL", "CPIAPPSL", "CPITRNSL",
+  "CPIMEDSL", "CUSR0000SAC", "CUSR0000SAD", "CUSR0000SAS", "CPIULFSL",
+  "CUSR0000SA0L2", "CUSR0000SA0L5", "PCEPI", "DNDGRG3M086SBEA",
+  "DSERRG3M086SBEA", "DDURRG3M086SBEA", "OILPRICEx", "WPSID61", "WPSID62",
+  "S&P 500", "S&P div yield", "VIXCLSx"
+)
+```
+
+```{r helpers}
+safe_select <- function(y, X, train_idx, penalties = c(1, 0.5, 0.1)) {
+  for (p in penalties) {
+    res <- tryCatch(select_topics(y, X, train_idx = train_idx, penalty_w = p),
+                    error = function(e) NULL)
+    if (!is.null(res) && length(res$selected)) return(res$selected)
+  }
+  character()
+}
+
+make_ratio <- function(x) {
+  if (length(x) == 0) return(numeric())
+  c(1, x[-1] / x[-length(x)])
+}
+```
+
+```{r load-data}
+macro_raw <- read.csv("./2025-10-MD.csv", stringsAsFactors = FALSE, check.names = FALSE)
+macro_raw$sasdate <- suppressWarnings(as.Date(macro_raw[[1]], format = "%m/%d/%Y"))
+macro_raw <- macro_raw[!is.na(macro_raw$sasdate), ]
+
+topics_df <- read.csv(topic_file)
+
+df <- topics_df %>%
+  mutate(date = as.Date(date)) %>%
+  filter(date < as.Date("2025-09-01"), date > as.Date("2015-08-31")) %>%
+  arrange(date) %>%
+  mutate(
+    month = format(date, "%Y-%m"),
+    day = day(date),
+    period = case_when(
+      day <= 10 ~ "up",
+      day <= 20 ~ "middle",
+      TRUE ~ "down"
+    )
+  )
+
+df_summary <- df %>%
+  group_by(month, period) %>%
+  summarise(across(everything(), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+
+y_m_list <- sort(unique(df_summary$month))
+tilde_y_m <- matrix(ncol = 3, nrow = length(y_m_list))
+for (i in seq_along(y_m_list)) {
+  res_ym <- y_m_list[i]
+  tilde_y_m[i, ] <- df_summary[df_summary$month == res_ym, ]$pred_score
+}
+
+topic_cols <- names(df_summary)[grepl("^topic", names(df_summary))]
+X_m_raw <- matrix(ncol = length(topic_cols), nrow = length(y_m_list))
+for (i in seq_along(y_m_list)) {
+  res_ym <- y_m_list[i]
+  X_m_raw[i, ] <- apply(df_summary[df_summary$month == res_ym, topic_cols], 2, mean)
+}
+X_m <- scale(X_m_raw)
+colnames(X_m) <- topic_cols
+
+topic_dates <- df$date
+topic_months <- df$month
+
+unrate_monthly <- df %>%
+  group_by(month) %>%
+  summarise(unrate = mean(UNRATE, na.rm = TRUE), .groups = "drop") %>%
+  filter(month %in% y_m_list)
+unrate_vec <- scale(unrate_monthly$unrate)
+```
+
+```{r compute}
+len_rows <- list()
+cov_rows <- list()
+wins <- 0
+total <- 0
+
+for (col_name in price_stock_targets) {
+  if (!col_name %in% names(macro_raw)) next
+  if (!is.numeric(macro_raw[[col_name]])) next
+
+  m_dates <- macro_raw$sasdate
+  m_vals <- macro_raw[[col_name]]
+  ptr <- 1
+  current <- NA_real_
+  target_series <- numeric(length(topic_dates))
+  for (i in seq_along(topic_dates)) {
+    t_d <- topic_dates[i]
+    while (ptr <= length(m_dates) && m_dates[ptr] <= t_d) {
+      current <- m_vals[ptr]
+      ptr <- ptr + 1
+    }
+    target_series[i] <- current
+  }
+
+  y_df <- data.frame(month = topic_months, y = target_series) %>%
+    group_by(month) %>%
+    summarise(y = mean(y, na.rm = TRUE), .groups = "drop") %>%
+    filter(month %in% y_m_list)
+  y_raw <- y_df$y
+  if (all(is.na(y_raw))) next
+  y_ratio <- make_ratio(y_raw)
+  if (length(y_ratio) < h + 1) next
+  y_center <- mean(y_ratio, na.rm = TRUE)
+  y_scale <- sd(y_ratio, na.rm = TRUE)
+  if (is.na(y_scale) || y_scale == 0) next
+  y <- (y_ratio - y_center) / y_scale
+  if (any(is.na(y))) next
+
+  test_idx <- (length(y) - h + 1):length(y)
+  obs_idx <- setdiff(seq_along(y), test_idx)
+
+  ar_fit0 <- tryCatch(
+    forecast::auto.arima(y[obs_idx], max.q = 0, D = 0, seasonal = FALSE,
+                         allowmean = FALSE, allowdrift = FALSE),
+    error = function(e) NULL
+  )
+  if (is.null(ar_fit0)) next
+  p_use <- max(1, ar_fit0$arma[1])
+
+  ar_fit <- tryCatch(
+    forecast::Arima(y[obs_idx], order = c(p_use, 0, 0), include.mean = FALSE),
+    error = function(e) NULL
+  )
+  if (is.null(ar_fit)) next
+  ar_fc <- forecast::forecast(ar_fit, h = length(test_idx))
+  ar_int <- cbind(ar_fc$lower[, 2], ar_fc$upper[, 2])
+
+  arx_fit <- tryCatch(
+    forecast::Arima(y[obs_idx], order = c(p_use, 0, 0),
+                    xreg = unrate_vec[obs_idx], include.mean = FALSE),
+    error = function(e) NULL
+  )
+  if (is.null(arx_fit)) next
+  arx_fc <- forecast::forecast(arx_fit, h = length(test_idx), xreg = unrate_vec[test_idx])
+  arx_int <- cbind(arx_fc$lower[, 2], arx_fc$upper[, 2])
+
+  strong_idx <- safe_select(y, X_m, obs_idx)
+
+  if (length(strong_idx) == 0) {
+    llm_int <- ar_int
+  } else {
+    llm_boot <- tryCatch(
+      LLM_TS.BOOT(X_m, y, tilde_y_m, p_use, 1, obs_idx, test_idx, strong_idx, h, B = 200),
+      error = function(e) NULL
+    )
+    if (is.null(llm_boot)) {
+      llm_int <- ar_int
+    } else {
+      llm_int <- llm_boot$interval
+    }
+  }
+
+  if (length(strong_idx) == 0) {
+    bj_int <- ar_int
+  } else {
+    bj_out <- tryCatch(
+      LLM_TS.BJ(X_m, y, tilde_y_m, p_use, 1, obs_idx, test_idx, strong_idx, length(test_idx)),
+      error = function(e) NULL
+    )
+    if (is.null(bj_out)) {
+      bj_int <- ar_int
+    } else {
+      bj_int <- bj_out$interval
+    }
+  }
+
+  spi_int <- NULL
+  if (length(strong_idx) > 0) {
+    spi_out <- tryCatch(
+      spi_recursive_one_h(
+        y = y,
+        X = X_m,
+        tilde_y = tilde_y_m,
+        X_sur = X_m,
+        strong_idx = strong_idx,
+        obs_idx = obs_idx,
+        test_idx = test_idx,
+        h = length(test_idx),
+        p2 = 1,
+        alpha = 0.05
+      ),
+      error = function(e) NULL
+    )
+    if (!is.null(spi_out)) {
+      spi_int <- cbind(spi_out$lower, spi_out$upper)
+    }
+  }
+
+  len_ar <- mean(ar_int[, 2] - ar_int[, 1], na.rm = TRUE)
+  len_arx <- mean(arx_int[, 2] - arx_int[, 1], na.rm = TRUE)
+  len_llm <- mean(llm_int[, 2] - llm_int[, 1], na.rm = TRUE)
+  len_bj <- mean(bj_int[, 2] - bj_int[, 1], na.rm = TRUE)
+  len_spi <- if (is.null(spi_int)) NA_real_ else mean(spi_int[, 2] - spi_int[, 1], na.rm = TRUE)
+
+  cov_ar <- mean(y[test_idx] >= ar_int[, 1] & y[test_idx] <= ar_int[, 2], na.rm = TRUE)
+  cov_arx <- mean(y[test_idx] >= arx_int[, 1] & y[test_idx] <= arx_int[, 2], na.rm = TRUE)
+  cov_llm <- mean(y[test_idx] >= llm_int[, 1] & y[test_idx] <= llm_int[, 2], na.rm = TRUE)
+  cov_bj <- mean(y[test_idx] >= bj_int[, 1] & y[test_idx] <= bj_int[, 2], na.rm = TRUE)
+  cov_spi <- if (is.null(spi_int)) NA_real_ else
+    mean(y[test_idx] >= spi_int[, 1] & y[test_idx] <= spi_int[, 2], na.rm = TRUE)
+
+  len_rows[[length(len_rows) + 1]] <- data.frame(
+    Index = col_name,
+    AR = len_ar,
+    ARX = len_arx,
+    LLM = len_llm,
+    BJ = len_bj,
+    SPI = len_spi
+  )
+
+  cov_rows[[length(cov_rows) + 1]] <- data.frame(
+    Index = col_name,
+    AR = cov_ar,
+    ARX = cov_arx,
+    LLM = cov_llm,
+    BJ = cov_bj,
+    SPI = cov_spi
+  )
+
+  wins <- wins + as.integer(len_llm < len_ar)
+  total <- total + 1
+}
+
+len_df <- if (length(len_rows)) do.call(rbind, len_rows) else data.frame()
+cov_df <- if (length(cov_rows)) do.call(rbind, cov_rows) else data.frame()
+```
+
+## Interval Length
+
+LLM shorter than AR in **`r wins`** of **`r total`** targets.
+
+```{r}
+data.frame(
+  LLM_shorter_than_AR = wins,
+  Total_targets = total
+)
+```
+
+```{r}
+len_df
+```
+
+## Coverage
+
+```{r}
+cov_df
+```
