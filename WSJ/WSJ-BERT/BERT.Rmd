@@ -7,7 +7,7 @@ output:
     theme: hpstr
     highlight: github
 params:
-  target_var: "CPIMEDSL"
+  target_var: "CPIAUCSL"
 ---
 
 
@@ -42,28 +42,6 @@ load_nf_metric <- function(index_name, h, model_name, results_dir = "./nf_result
     rmse = payload$results[[model_name]]$rmse,
     sign_mismatch = payload$results[[model_name]]$sign_mismatch
   )
-}
-
-target_list <- c("CPIAUCSL", "CPIAPPSL", "CPITRNSL", "CPIMEDSL", "CPIULFSL")
-if (identical(params$target_var, "ALL")) {
-  rscript_bin <- Sys.which("Rscript")
-  if (!nzchar(rscript_bin)) {
-    stop("Rscript not found on PATH; cannot render per-index outputs.")
-  }
-  wd <- normalizePath(getwd(), winslash = "/")
-  wd <- gsub("'", "\\\\'", wd)
-  for (idx in target_list) {
-    expr <- sprintf(
-      "setwd('%s'); rmarkdown::render('BERT.Rmd', params=list(target_var='%s'), output_file='BERT_%s.html')",
-      wd, idx, idx
-    )
-    cmd <- paste0(shQuote(rscript_bin), " -e \"", gsub("\"", "\\\\\"", expr), "\"")
-    status <- system(cmd)
-    if (!identical(status, 0L)) {
-      stop(paste("Render failed for index:", idx))
-    }
-  }
-  knitr::knit_exit()
 }
 ```
 
