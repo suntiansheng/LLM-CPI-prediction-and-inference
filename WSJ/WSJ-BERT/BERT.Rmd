@@ -7,7 +7,7 @@ output:
     theme: hpstr
     highlight: github
 params:
-  target_var: "CPIMEDSL"
+  target_var: "CPIAUCSL"
 ---
 
 
