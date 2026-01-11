@@ -14,7 +14,6 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 source("./utility.R")
 library(lubridate)
-set.seed(2025)
 setwd("/Users/sunao/Desktop/LLM-TS-Revision/code/real_data/Weibo-final/")
 
 Average_prediction <- function(y, H) {

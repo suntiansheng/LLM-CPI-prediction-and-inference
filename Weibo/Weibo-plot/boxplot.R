@@ -6,7 +6,6 @@ suppressPackageStartupMessages({
 })
 
 source("utility.R")
-set.seed(1234)
 
 df_raw <- read.csv("bert_final.csv", check.names = FALSE, stringsAsFactors = FALSE)
 

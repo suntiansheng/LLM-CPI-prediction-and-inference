@@ -16,7 +16,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 source("./utility.R")
 library(lubridate)
-set.seed(2025)
 
 
 Average_prediction <- function(y, H) {

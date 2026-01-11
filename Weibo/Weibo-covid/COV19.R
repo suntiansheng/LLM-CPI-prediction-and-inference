@@ -76,7 +76,6 @@ y = scale(y,center = FALSE)
 
 
 
-set.seed(1234)
 h_c <- seq(2,6,1)
 res_c <- NULL
 rank_c <- NULL
@@ -106,7 +105,6 @@ strong_idx <- order(abs(cov(ar_fit$residuals, X_m[obs_idx,])), decreasing = TRUE
 
 
 
-set.seed(1234)
 Res_m <- matrix(nrow = length(h_c), ncol = 11)
 for(k in 1:length(h_c)){
   h <- h_c[k]
@@ -238,7 +236,6 @@ y = scale(y,center = FALSE)
 
 
 
-set.seed(1234)
 h_c <- seq(2,6,1)
 res_c <- NULL
 rank_c <- NULL
@@ -269,7 +266,6 @@ strong_idx <- order(abs(cor(ar_fit$residuals, X_m[obs_idx,])), decreasing = TRUE
 
 
 
-set.seed(1234)
 Res_m <- matrix(nrow = length(h_c), ncol = 11)
 for(k in 1:length(h_c)){
   h <- h_c[k]

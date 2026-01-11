@@ -14,7 +14,6 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 source("./utility.R")
 source("./SPI.R")
-set.seed(1234)
 library(dplyr)
 library(forecast)
 library(MTS)
@@ -97,7 +96,6 @@ unem = scale(unem)
 
 
 ```{r}
-set.seed(1234)
 EOD = min(45, length(y))
 strong_idx <- select_topics(y, X_m, EOD = EOD, add_one = TRUE)
 strong_idx
@@ -106,7 +104,6 @@ strong_idx
 
 
 ```{r}
-set.seed(1234)
 h_c <- seq(8,15,1)
 res_pred <- try({
 Res_m <- matrix(nrow = length(h_c), ncol = 16)
@@ -194,7 +191,6 @@ colnames(LDA_sign) <- c('AR','RW','AVE','AR+unem','LDA','LDA+unem','LLM+LDA','LL
 
 
 ```{r}
-set.seed(1234)
 h_c <- seq(8,15,1)
 
 res_pi <- try({
@@ -357,7 +353,6 @@ X_m <- scale(X_m, center = FALSE)
 
 
 ```{r}
-set.seed(1234)
 EOD = 45
 strong_idx <- select_topics(y, X_m, EOD = EOD, add_one = FALSE)
 strong_idx
@@ -401,7 +396,6 @@ print(barplot)
 
 
 ```{r}
-set.seed(1234)
 h_c <- seq(8,15,1)
 Res_m <- matrix(nrow = length(h_c), ncol = 16)
 for(k in 1:length(h_c)){
@@ -494,7 +488,6 @@ colnames(BERT_sign) <- c('AR','RW','AVE','AR+unem','BERT','BERT+unem', 'LLM+BERT
 
 
 ```{r}
-set.seed(1234)
 h_c <- seq(8,15,1)
 
 coverage_m <- matrix(0, nrow = length(h_c), ncol = 8)

@@ -13,7 +13,6 @@ suppressPackageStartupMessages({
   library(lubridate)
   library(forecast)
 })
-set.seed(1234)
 source("./utility.R")
 source("./SPI.R")
 ```

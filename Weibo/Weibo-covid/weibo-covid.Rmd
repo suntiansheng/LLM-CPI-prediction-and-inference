@@ -54,7 +54,6 @@ as_tables <- function(Res_m, h_c) {
 
 
 ```{r}
-set.seed(1234)
 df <- read.csv("3year_meanTopic20Distri_mergeCPI_df19-21_20250314.csv")
 Top_num <- 20
 df_new <- df[, c(1, 3, 7:(Top_num + 6))]
@@ -103,7 +102,6 @@ y <- y_df$y
 y <- y - 100
 y <- scale(y, center = FALSE)
 
-set.seed(1234)
 h_c <- seq(3, 6, 1)
 rank_c <- NULL
 for (k in 1:length(h_c)) {
@@ -143,7 +141,6 @@ for (k in 1:length(h_c)) {
 num_topic <- as.numeric(names(which.max(table(rank_c))))
 strong_idx <- order(abs(cov(ar_fit$residuals, X_m[obs_idx, ])), decreasing = TRUE)[1:num_topic]
 
-set.seed(1234)
 Res_m <- matrix(nrow = length(h_c), ncol = 7)
 for (k in 1:length(h_c)) {
   h <- h_c[k]
@@ -223,7 +220,6 @@ print(knitr::kable(sign_avg_1921, digits = 3, caption = "Average Sign mismatch (
 
 
 ```{r}
-set.seed(1234)
 df <- read.csv("3year_meanTopic20Distri_mergeCPI_df21-23_20250314.csv")
 Top_num <- 20
 df_new <- df[, c(1, 3, 7:(Top_num + 6))]
@@ -272,7 +268,6 @@ y <- y_df$y
 y <- y - 100
 y <- scale(y, center = FALSE)
 
-set.seed(1234)
 h_c <- seq(3, 6, 1)
 rank_c <- NULL
 for (k in 1:length(h_c)) {
@@ -312,7 +307,6 @@ for (k in 1:length(h_c)) {
 num_topic <- as.numeric(names(which.max(table(rank_c))))
 strong_idx <- order(abs(cor(ar_fit$residuals, X_m[obs_idx, ])), decreasing = TRUE)[1:num_topic]
 
-set.seed(1234)
 Res_m <- matrix(nrow = length(h_c), ncol = 7)
 for (k in 1:length(h_c)) {
   h <- h_c[k]
