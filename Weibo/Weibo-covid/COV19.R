@@ -87,15 +87,15 @@ for(k in 1:length(h_c)){
   ar_fit <- auto.arima(y[obs_idx], max.q = 0, D = 0,seasonal = FALSE, allowmean = FALSE, allowdrift = FALSE)
   ar_fit <- arima(y[obs_idx], order = c(ar_fit$arma[1],0,0), include.mean = FALSE)
   ar_prediction <- predict(ar_fit, n.ahead = h)$pred
-  
+
   mse_c <- NULL
   for(i in 1:Top_num){
     strong_idx <- order(abs(cov(ar_fit$residuals, X_m[obs_idx,])), decreasing = TRUE)[1:i]
     arx_fit <- arima(y[obs_idx], order = c(ar_fit$arma[1],0,0), xreg = X_m[obs_idx,strong_idx], include.mean = FALSE)
     arx_predictions <- predict(arx_fit, n.ahead = h, newxreg = X_m[test_idx,strong_idx])$pred
-    
+
     mse_c[i] <- mean((arx_predictions-y[test_idx])^2)
-    
+
   }
   rank_c[k] <- which.min(mse_c)
 }
@@ -113,38 +113,38 @@ for(k in 1:length(h_c)){
   res_c <- NULL
   test_idx <- (length(y)-h+1):length(y)
   obs_idx <- setdiff(1:length(y), test_idx)
-  
+
 
   ar_fit <- auto.arima(y[obs_idx],max.q = 0, D = 0,seasonal = FALSE, allowmean = FALSE, allowdrift = FALSE)
   ar_fit <- arima(y[obs_idx], order = c(ar_fit$arma[1],0,0), include.mean = FALSE)
   ar_prediction <- predict(ar_fit, n.ahead = h)$pred
-  
+
   res_c <- c(res_c, mean((ar_prediction-y[test_idx])^2))
   res_c <- c(res_c, mean(sign(ar_prediction) !=sign(y[test_idx])))
-  
+
 
   mean_prediction <- rep(y[max(obs_idx)], length(test_idx))
   res_c <- c(res_c, sqrt(mean((mean_prediction-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(mean_prediction) !=sign(y[test_idx])))
-  
+
 
   ave_prediction <- Average_prediction(y[obs_idx], length(test_idx))
   res_c <- c(res_c, sqrt(mean((ave_prediction-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(ave_prediction) !=sign(y[test_idx])))
-  
+
 
   arx_fit <- arima(y[obs_idx], order = c(ar_fit$arma[1],0,0), xreg = X_m[obs_idx,strong_idx], include.mean = FALSE)
   arx_predictions <- predict(arx_fit, n.ahead = h, newxreg = X_m[test_idx,strong_idx])$pred
-  
+
   res_c <- c(res_c, mean((arx_predictions-y[test_idx])^2))
   res_c <- c(res_c, mean(sign(arx_predictions) !=sign(y[test_idx])))
-  
+
 
   p1=ar_fit$arma[1]
   p2=1
-  powered_prediction <- Prediction_powered_ts(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+  powered_prediction <- Prediction_powered_ts(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
                                               strong_idx, h)
-  
+
   res_c <- c(res_c, mean((powered_prediction-y[test_idx])^2))
   res_c <- c(res_c, mean(sign(powered_prediction) !=sign(y[test_idx])))
   Res_m[k,] <- c(h,res_c)
@@ -159,7 +159,7 @@ Res_m <- Res_m[,2:ncol(Res_m)]
 
 Res_m[,seq(1,ncol(Res_m),2)]
 Res_m[,seq(2,ncol(Res_m),2)]
-  
+
 
 
 
@@ -249,15 +249,15 @@ for(k in 1:length(h_c)){
   ar_fit <- auto.arima(y[obs_idx], max.q = 0, D = 0,seasonal = FALSE, allowmean = FALSE, allowdrift = FALSE)
   ar_fit <- arima(y[obs_idx], order = c(ar_fit$arma[1],0,0), include.mean = FALSE)
   ar_prediction <- predict(ar_fit, n.ahead = h)$pred
-  
+
   mse_c <- NULL
   for(i in 1:Top_num){
     strong_idx <- order(abs(cor(ar_fit$residuals, X_m[obs_idx,])), decreasing = TRUE)[1:i]
     arx_fit <- arima(y[obs_idx], order = c(ar_fit$arma[1],0,0), xreg = X_m[obs_idx,strong_idx], include.mean = FALSE)
     arx_predictions <- predict(arx_fit, n.ahead = h, newxreg = X_m[test_idx,strong_idx])$pred
-    
+
     mse_c[i] <- mean((arx_predictions-y[test_idx])^2)
-    
+
   }
   rank_c[k] <- which.min(mse_c)
 }
@@ -276,39 +276,39 @@ for(k in 1:length(h_c)){
   res_c <- NULL
   test_idx <- (length(y)-h+1):length(y)
   obs_idx <- setdiff(1:length(y), test_idx)
-  
+
   ar_fit <- auto.arima(y[obs_idx],max.q = 0, D = 0,seasonal = FALSE, allowmean = FALSE, allowdrift = FALSE)
   ar_fit <- arima(y[obs_idx], order = c(ar_fit$arma[1],0,0), include.mean = FALSE)
   ar_prediction <- predict(ar_fit, n.ahead = h)$pred
-  
+
   res_c <- c(res_c, mean((ar_prediction-y[test_idx])^2))
   res_c <- c(res_c, mean(sign(ar_prediction) !=sign(y[test_idx])))
-  
+
 
   mean_prediction <- rep(y[max(obs_idx)], length(test_idx))
   res_c <- c(res_c, sqrt(mean((mean_prediction-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(mean_prediction) !=sign(y[test_idx])))
-  
+
 
   ave_prediction <- Average_prediction(y[obs_idx], length(test_idx))
   res_c <- c(res_c, sqrt(mean((ave_prediction-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(ave_prediction) !=sign(y[test_idx])))
-  
-  
+
+
   arx_fit <- arima(y[obs_idx], order = c(ar_fit$arma[1],0,0), xreg = X_m[obs_idx,strong_idx], include.mean = FALSE)
   arx_predictions <- predict(arx_fit, n.ahead = h, newxreg = X_m[test_idx,strong_idx])$pred
-  
+
   res_c <- c(res_c, mean((arx_predictions-y[test_idx])^2))
   res_c <- c(res_c, mean(sign(arx_predictions) !=sign(y[test_idx])))
-  
-  
-  
-  
+
+
+
+
   p1=ar_fit$arma[1]
   p2=1
-  powered_prediction <- Prediction_powered_ts(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+  powered_prediction <- Prediction_powered_ts(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
                                               strong_idx, h)
-  
+
   res_c <- c(res_c, mean((powered_prediction-y[test_idx])^2))
   res_c <- c(res_c, mean(sign(powered_prediction) !=sign(y[test_idx])))
   Res_m[k,] <- c(h,res_c)

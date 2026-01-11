@@ -104,7 +104,7 @@ LLM_TS.BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
   coef <- y_fit$coef
   coef_ar <- coef[1:p1]
   coef_x <- coef[(p1+1):length(coef)]
-  
+
 
   n_obs <- length(obs_idx)
   n_cal <- max(5, floor(0.18 * n_obs))
@@ -124,11 +124,11 @@ LLM_TS.BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
     }, numeric(1))
     var_h_vec[i] <- mean(resids^2, na.rm = TRUE)
   }
-  
-  
+
+
 
   start_idx <- max(obs_idx)
-  
+
   predictions <- recursive_arx_forecast(
     y = y,
     X = arx_inputs$X_aug,
@@ -138,11 +138,11 @@ LLM_TS.BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
     start_idx = start_idx,
     h = h
   )
-  
-  
+
+
 
   z_crit <- qnorm(1 - alpha/2)
-  
+
   interval_m <- matrix(nrow = h, ncol = 2)
   fallback_var <- mean(y_fit$residuals^2, na.rm = TRUE)
   cap_multiplier <- 4
@@ -153,7 +153,7 @@ LLM_TS.BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
     interval_m[i, 1] <- predictions[i] - z_crit * sd_h
     interval_m[i, 2] <- predictions[i] + z_crit * sd_h
   }
-  
+
   list(predictions = predictions, interval = interval_m)
 }
 

@@ -1,4 +1,4 @@
-Prediction_powered_ts <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+Prediction_powered_ts <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
                                   strong_idx, h){
   Ti <- dim(tilde_y_m)[1]
 
@@ -6,35 +6,35 @@ Prediction_powered_ts <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
 
   invisible(capture.output(tilde_y_fit <- VARX(zt = tilde_y_m, p=p2, xt = X_m[,strong_idx], m=0, include.mean = FALSE)))
 
-  
 
-  
+
+
   ar_est <- tilde_y_fit$Phi
   hat_y <- matrix(0,nrow = Ti, dim(tilde_y_m)[2])
   for(t in (p2+1):Ti){
     hat_y[t,] <- (diag(ncol(tilde_y_m)) - ar_est)%*%t(tilde_y_m[t,,drop = FALSE])
   }
-  
+
   y_obs <- y[obs_idx]
   X_aug <- cbind(X_m[,strong_idx], hat_y)
   X_aug_obs <- X_aug[obs_idx,]
-  
+
 
 
   y_fit <- arima(y_obs, order = c(p1,0,0), xreg = X_aug_obs, include.mean = FALSE)
-  
 
-  
+
+
 
 
   X_future <- X_aug[test_idx,]
 
-  
+
   predictions <- predict(y_fit, n.ahead = h, newxreg = X_future)$pred
   return(predictions)
 }
 
-Prediction_BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+Prediction_BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
                           strong_idx, h, alpha=0.05){
 
 
@@ -44,30 +44,30 @@ Prediction_BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
 
 
 
-  
-  
+
+
   Ti <- dim(tilde_y_m)[1]
 
 
   invisible(capture.output(tilde_y_fit <- VARX(zt = tilde_y_m, p=p2, xt = X_m[,strong_idx], m=0, include.mean = FALSE)))
 
-  
 
-  
+
+
   ar_est <- tilde_y_fit$Phi
   hat_y <- matrix(0,nrow = Ti, dim(tilde_y_m)[2])
   for(t in (p2+1):Ti){
     hat_y[t,] <- (diag(ncol(tilde_y_m)) - ar_est)%*%t(tilde_y_m[t,,drop = FALSE])
   }
-  
+
   y_obs <- y[obs_idx]
   X_aug <- cbind(X_m[,strong_idx], hat_y)
   X_aug_obs <- X_aug[obs_idx,]
-  
+
 
 
   y_fit <- arima(y_obs, order = c(p1,0,0), xreg = X_aug_obs, include.mean = FALSE)
-  
+
   var_e <- mean(y_fit$residuals^2)
   alpha_hat <- y_fit$coef[1:p1]
   I_q1 <- diag(p1-1)
@@ -76,7 +76,7 @@ Prediction_BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
   X_future <- X_aug[test_idx,]
 
   predictions <- predict(y_fit, n.ahead = h, newxreg = X_future)$pred
-  
+
   interval_m <- matrix(nrow = h, ncol = 2)
   var_h <- 0
   for(i in 1:h){
@@ -89,7 +89,7 @@ Prediction_BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
 }
 
 
-Bootstrap_powered_ts <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+Bootstrap_powered_ts <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
                                  strong_idx, h, alpha=0.05, B=500){
 
 
@@ -99,29 +99,29 @@ Bootstrap_powered_ts <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
 
 
 
-  
-  
+
+
   Ti <- dim(tilde_y_m)[1]
   invisible(capture.output(tilde_y_fit <- VARX(zt = tilde_y_m, p=p2, xt = X_m[,strong_idx], m=0, include.mean = FALSE)))
-  
+
   ar_est <- tilde_y_fit$Phi
   hat_y <- matrix(0,nrow = Ti, dim(tilde_y_m)[2])
   for(t in (p2+1):Ti){
     hat_y[t,] <- (diag(ncol(tilde_y_m)) - ar_est)%*%t(tilde_y_m[t,,drop = FALSE])
   }
-  
+
   y_obs <- y[obs_idx]
   X_aug <- cbind(X_m[,strong_idx], hat_y)
   X_aug_obs <- X_aug[obs_idx,]
-  
+
   y_fit <- arima(y_obs, order = c(p1,0,0), xreg = X_aug_obs, include.mean = FALSE)
-  
-  residual_c <- y_fit$residuals 
+
+  residual_c <- y_fit$residuals
   residual_c <- residual_c[(p1+1):length(obs_idx)]
-  
+
   X_future <- X_aug[test_idx,]
   predictions <- predict(y_fit, n.ahead = h, newxreg = X_future)$pred
-  
+
   Boot_m <- matrix(nrow = B, ncol = h)
   for(b in 1:B){
     res_residual <- sample(residual_c, h, replace = TRUE)
@@ -135,9 +135,9 @@ Bootstrap_powered_ts <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
     }
     Boot_m[b,] <- res_boot_pre_c[(p1+1):(h+p1)]
   }
-  
+
   interval_m <- matrix(nrow = h, ncol = 2)
-  
+
   interval_m[,1] <- apply(Boot_m,2,quantile,alpha/2)
   interval_m[,2] <- apply(Boot_m,2,quantile,1-alpha/2)
   return(list(predictions, interval = interval_m))
@@ -163,7 +163,7 @@ Average_prediction <- function(y, H){
     pre_c[h] <- mean(y[length(y):(length(y)-h+1)])
   }
   return(pre_c)
-} 
+}
 
 
 check_coverage <- function(pred_intervals, true_values) {

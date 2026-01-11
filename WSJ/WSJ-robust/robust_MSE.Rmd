@@ -226,7 +226,7 @@ if (length(results)) {
 }
 ```
 
-## Ratio Tables
+
 
 ```{r}
 if (exists("out") && nrow(out) > 0) {
@@ -253,19 +253,19 @@ if (exists("out") && nrow(out) > 0) {
 }
 ```
 
-### rMSE (relative to AR)
+
 
 ```{r}
 knitr::kable(rMSE, digits = 4)
 ```
 
-### rMSE >= 1 Count
+
 
 ```{r}
 knitr::kable(rMSE_ge)
 ```
 
-## Selected Topic Frequency
+
 
 ```{r}
 if (exists("out") && nrow(out) > 0) {

@@ -14,23 +14,23 @@
 spi_transport_scores <- function(real_scores, synth_scores) {
   real_scores  <- as.numeric(real_scores)
   synth_scores <- as.numeric(synth_scores)
-  
+
   n_real  <- length(real_scores)
   n_synth <- length(synth_scores)
-  
+
   if (n_real < 1L || n_synth < 1L) {
     stop("Need at least one real and one synthetic score.")
   }
-  
+
 
   F_real <- ecdf(real_scores)
   u <- F_real(real_scores)
-  
+
 
   eps <- 1e-8
   u[u <= 0] <- eps
   u[u >= 1] <- 1 - eps
-  
+
 
 
   z <- as.numeric(quantile(synth_scores, probs = u, type = 1, names = FALSE))
@@ -41,21 +41,21 @@ spi_transport_scores <- function(real_scores, synth_scores) {
 spi_threshold <- function(real_scores, synth_scores, alpha = 0.1) {
   real_scores  <- as.numeric(real_scores)
   synth_scores <- as.numeric(synth_scores)
-  
+
   if (alpha <= 0 || alpha >= 1) {
     stop("alpha must be in (0,1).")
   }
-  
+
 
   z_real <- spi_transport_scores(real_scores, synth_scores)
-  
+
 
   q_synth <- as.numeric(quantile(synth_scores, probs = 1 - alpha,
                                  type = 1, names = FALSE))
-  
+
 
   idx <- which(z_real <= q_synth + 1e-12)
-  
+
   if (length(idx) == 0L) {
 
 
@@ -64,7 +64,7 @@ spi_threshold <- function(real_scores, synth_scores, alpha = 0.1) {
 
     q_spi <- max(real_scores[idx])
   }
-  
+
   list(
     q_spi   = q_spi,
     q_synth = q_synth,
@@ -90,24 +90,24 @@ spi_interval_one_step <- function(y_cal,
                                   alpha = 0.1) {
   y_cal    <- as.numeric(y_cal)
   yhat_cal <- as.numeric(yhat_cal)
-  
+
   if (length(y_cal) != length(yhat_cal)) {
     stop("y_cal and yhat_cal must have the same length.")
   }
-  
+
 
   real_scores <- abs(y_cal - yhat_cal)
-  
+
   thr <- spi_threshold(real_scores = real_scores,
                        synth_scores = synth_scores,
                        alpha = alpha)
-  
+
   q_spi <- thr$q_spi
-  
+
 
   lower <- yhat_test - q_spi
   upper <- yhat_test + q_spi
-  
+
   list(
     lower      = lower,
     upper      = upper,

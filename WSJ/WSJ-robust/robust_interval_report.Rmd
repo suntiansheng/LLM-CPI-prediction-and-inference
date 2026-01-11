@@ -254,7 +254,7 @@ len_df <- if (length(len_rows)) do.call(rbind, len_rows) else data.frame()
 cov_df <- if (length(cov_rows)) do.call(rbind, cov_rows) else data.frame()
 ```
 
-## Interval Length
+
 
 LLM shorter than AR in **`r wins`** of **`r total`** targets.
 
@@ -269,7 +269,7 @@ data.frame(
 len_df
 ```
 
-## Coverage
+
 
 ```{r}
 cov_df

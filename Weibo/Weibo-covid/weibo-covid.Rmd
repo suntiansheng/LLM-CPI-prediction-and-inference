@@ -51,7 +51,7 @@ as_tables <- function(Res_m, h_c) {
 }
 ```
 
-## 2019-2021
+
 
 ```{r}
 set.seed(1234)
@@ -220,7 +220,7 @@ print(knitr::kable(rmse_avg_1921, digits = 3, caption = "Average RMSE (2019-2021
 print(knitr::kable(sign_avg_1921, digits = 3, caption = "Average Sign mismatch (2019-2021)"))
 ```
 
-## 2021-2023
+
 
 ```{r}
 set.seed(1234)

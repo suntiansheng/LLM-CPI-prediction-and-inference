@@ -100,15 +100,15 @@ ar_unem_interval <- cbind(ar_unem_predictions_fit$lower[,2], ar_unem_predictions
 p1=ar_fit$arma[1]
 p2=1
 
-powered_lda_interval_fit <- LLM_TS.BJ(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+powered_lda_interval_fit <- LLM_TS.BJ(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
                                       strong_idx, h)
 
 LLM_prediction <- powered_lda_interval_fit[[1]]
 LLM_interval <- powered_lda_interval_fit$interval
 
 
-dates <- seq.Date(from = as.Date("2019-01-01"), 
-                  to = as.Date("2025-09-01"), 
+dates <- seq.Date(from = as.Date("2019-01-01"),
+                  to = as.Date("2025-09-01"),
                   by = "month")
 n <- length(dates)
 actual <- y
@@ -129,12 +129,12 @@ ts_data <- ts_data %>%
     AR_fit = ifelse(Date >= forecast_start_date, ar_prediction, NA),
     AR_lwr = ifelse(Date >= forecast_start_date, ar_interval[,1], NA),
     AR_upr = ifelse(Date >= forecast_start_date, ar_interval[,2], NA),
-    
+
 
     ARX_fit = ifelse(Date >= forecast_start_date, ar_unem_predictions, NA),
     ARX_lwr = ifelse(Date >= forecast_start_date, ar_unem_interval[,1], NA),
     ARX_upr = ifelse(Date >= forecast_start_date, ar_unem_interval[,2], NA),
-    
+
 
     LLM_fit = ifelse(Date >= forecast_start_date, LLM_prediction, NA),
     LLM_lwr = ifelse(Date >= forecast_start_date, LLM_interval[,1], NA),
@@ -146,7 +146,7 @@ ts_data <- ts_data %>%
 
 his_plot_df <- ts_data[46:nrow(ts_data), c('Actual', 'AR_fit', 'ARX_fit', 'LLM_fit')]
 colnames(his_plot_df) <- c("Actual", "AR", "ARX", "LLM-CPI")
-long_data <- pivot_longer(his_plot_df, cols = c("Actual", "AR", "ARX", "LLM-CPI"), 
+long_data <- pivot_longer(his_plot_df, cols = c("Actual", "AR", "ARX", "LLM-CPI"),
                           names_to = "Type", values_to = "Value")
 
 
@@ -185,7 +185,7 @@ p_time <- ggplot(ts_data, aes(x = Date)) +
   geom_ribbon(aes(ymin = ARX_lwr, ymax = AR_upr, fill = "ARX"), alpha = 0.25) +
   geom_line(aes(y = LLM_fit, color = "LLM-CPI"), linewidth = 1.0) +
   geom_ribbon(aes(ymin = LLM_lwr, ymax = LLM_upr, fill = "LLM-CPI"), alpha = 0.5) +
-  geom_vline(xintercept = as.numeric(ts_data$Date[46]), 
+  geom_vline(xintercept = as.numeric(ts_data$Date[46]),
              linetype = "dotted", color = "gray50") +
   annotate("text", x = ts_data$Date[46], y = min(ts_data$Actual, na.rm = TRUE),
            label = "Forecast Start", hjust = 1.1, vjust = -0.5, size = 3, color = "gray30") +

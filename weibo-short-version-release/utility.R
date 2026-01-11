@@ -1,4 +1,4 @@
-#!/usr/bin/env Rscript
+
 
 suppressPackageStartupMessages({
   library(forecast)
@@ -15,46 +15,46 @@ safe_auto_arima <- function(...) {
   fit
 }
 
-LLM_TS.Predict <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+LLM_TS.Predict <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
                                   strong_idx, h) {
   Ti <- dim(tilde_y_m)[1]
   invisible(capture.output(tilde_y_fit <- VARX(zt = tilde_y_m, p=p2, xt = X_m[,strong_idx], m=0, include.mean = FALSE)))
-  
+
   ar_est <- tilde_y_fit$Phi
   hat_y <- matrix(0,nrow = Ti, dim(tilde_y_m)[2])
   for(t in (p2+1):Ti){
     hat_y[t,] <- (diag(ncol(tilde_y_m)) - ar_est)%*%t(tilde_y_m[t,,drop = FALSE])
   }
-  
+
   y_obs <- y[obs_idx]
   X_aug <- cbind(X_m[,strong_idx], hat_y)
   X_aug_obs <- X_aug[obs_idx,]
-  
+
   y_fit <- arima(y_obs, order = c(p1,0,0), xreg = X_aug_obs, include.mean = FALSE)
-  
+
   X_future <- X_aug[test_idx,]
-  
+
   predictions <- predict(y_fit, n.ahead = h, newxreg = X_future)$pred
   return(predictions)
 }
 
-LLM_TS.BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+LLM_TS.BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
                           strong_idx, h, alpha=0.05){
   Ti <- dim(tilde_y_m)[1]
   invisible(capture.output(tilde_y_fit <- VARX(zt = tilde_y_m, p=p2, xt = X_m[,strong_idx], m=0, include.mean = FALSE)))
-  
+
   ar_est <- tilde_y_fit$Phi
   hat_y <- matrix(0,nrow = Ti, dim(tilde_y_m)[2])
   for(t in (p2+1):Ti){
     hat_y[t,] <- (diag(ncol(tilde_y_m)) - ar_est)%*%t(tilde_y_m[t,,drop = FALSE])
   }
-  
+
   y_obs <- y[obs_idx]
   X_aug <- cbind(X_m[,strong_idx], hat_y)
   X_aug_obs <- X_aug[obs_idx,]
-  
+
   y_fit <- arima(y_obs, order = c(p1,0,0), xreg = X_aug_obs, include.mean = FALSE)
-  
+
   var_e <- mean(y_fit$residuals^2)
   alpha_hat <- y_fit$coef[1:p1]
   I_q1 <- diag(p1-1)
@@ -62,7 +62,7 @@ LLM_TS.BJ <- function(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx,
   A_hat <- rbind(alpha_hat, I_q1)
   X_future <- X_aug[test_idx,]
   predictions <- predict(y_fit, n.ahead = h, newxreg = X_future)$pred
-  
+
   interval_m <- matrix(nrow = h, ncol = 2)
   var_h <- 0
   for(i in 1:h){

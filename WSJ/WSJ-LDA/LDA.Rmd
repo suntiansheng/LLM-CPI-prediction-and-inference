@@ -66,7 +66,7 @@ if (identical(params$target_var, "ALL")) {
 }
 ```
 
-## LLM-Powered Prediction with LDA Embedding 
+
 ```{r}
 target_var <- params$target_var
 macro_raw <- read.csv("./2025-10-MD.csv", stringsAsFactors = FALSE, check.names = FALSE)
@@ -90,7 +90,7 @@ df <- topics_df %>%
   )
 ```
 
-### Data preprocessing
+
 ```{r}
 df_summary <- df %>%
   group_by(month, period) %>%
@@ -152,12 +152,12 @@ y_scale <- sd(y_ratio, na.rm = TRUE)
 y <- (y_ratio - y_center) / y_scale
 ```
 
-### Data analysis
 
-#### Variable Selection via correlation pursuit
+
+
 ```{r}
 
-EOD <- max(which(month_dates < as.Date("2024-06-01"))) 
+EOD <- max(which(month_dates < as.Date("2024-06-01")))
 sel <- select_topics(y, X_m, train_idx = 1:EOD, use_cor = FALSE, penalty_w = 0.1)
 strong_idx <- match(sel$selected, colnames(X_m))
 strong_idx <- strong_idx[!is.na(strong_idx)]
@@ -168,7 +168,7 @@ strong_idx
 ```
 
 
-#### Prediction
+
 ```{r}
 h_pred <- seq(8,15,1)
 
@@ -178,7 +178,7 @@ for(k in seq_along(h_pred)){
   res_c <- NULL
   test_idx <- (length(y) - h + 1):length(y)
   obs_idx <- setdiff(seq_along(y), test_idx)
-  
+
 
   ar_base <- auto.arima(y[obs_idx],max.q = 0, D = 0,seasonal = FALSE, allowmean = FALSE, allowdrift = FALSE)
   p1 <- max(1, ar_base$arma[1])
@@ -186,33 +186,33 @@ for(k in seq_along(h_pred)){
   ar_prediction <- predict(ar_fit, n.ahead = h)$pred
   res_c <- c(res_c, sqrt(mean((ar_prediction-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(ar_prediction) !=sign(y[test_idx])))
-  
+
 
   mean_prediction <- rep(y[max(obs_idx)], length(test_idx))
  res_c <- c(res_c, sqrt(mean((mean_prediction-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(mean_prediction) !=sign(y[test_idx])))
-  
+
 
   ave_prediction <- Average_prediction(y[obs_idx], length(test_idx))
   res_c <- c(res_c, sqrt(mean((ave_prediction-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(ave_prediction) !=sign(y[test_idx])))
-  
+
 
   ar_unem_base <- auto.arima(y[obs_idx], xreg = unem[obs_idx], max.q = 0, D = 0,seasonal = FALSE, allowmean = FALSE,      allowdrift = FALSE)
   p1_un <- max(1, ar_unem_base$arma[1])
   ar_unem_fit <- arima(y[obs_idx], xreg = unem[obs_idx], order = c(p1_un,0,0), include.mean = FALSE)
   ar_unem_prediction <- predict(ar_unem_fit, newxreg = unem[test_idx], n.ahead = h)$pred
-  
+
   res_c <- c(res_c, sqrt(mean((ar_unem_prediction-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(ar_unem_prediction) !=sign(y[test_idx])))
 
 
   arx_fit <- arima(y[obs_idx], order = c(p1,0,0), xreg = X_m[obs_idx,strong_idx, drop = FALSE], include.mean = FALSE)
   arx_predictions <- predict(arx_fit, n.ahead = h, newxreg = X_m[test_idx,strong_idx, drop = FALSE])$pred
-  
+
   res_c <- c(res_c, sqrt(mean((arx_predictions-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(arx_predictions) !=sign(y[test_idx])))
-  
+
 
   arx_unem_fit <- arima(y[obs_idx],order = c(p1,0,0), xreg = cbind(X_m[obs_idx,strong_idx, drop=FALSE],unem[obs_idx]), include.mean = FALSE)
   arx_unem_predictions <- predict(arx_unem_fit, n.ahead=h, newxreg=cbind(X_m[test_idx,strong_idx,drop=FALSE],  unem[test_idx]))$pred
@@ -222,24 +222,24 @@ for(k in seq_along(h_pred)){
 
 
   p2=1
-  
+
   powered_prediction <- LLM_TS.Predict(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, strong_idx, h)
 
   res_c <- c(res_c, sqrt(mean((powered_prediction-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(powered_prediction) !=sign(y[test_idx])))
-  
 
-  powered_unem_prediction <- LLM_TS.Predict(cbind(X_m,unem), y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+
+  powered_unem_prediction <- LLM_TS.Predict(cbind(X_m,unem), y, tilde_y_m, p1, p2, obs_idx, test_idx,
                                             c(strong_idx,ncol(X_m)+1), h)
 
-  
+
   res_c <- c(res_c, sqrt(mean((powered_unem_prediction-y[test_idx])^2)))
   res_c <- c(res_c, mean(sign(powered_unem_prediction) !=sign(y[test_idx])))
 
 
   time_llm_metrics <- load_nf_metric(target_var, h, "TimeLLM")
   res_c <- c(res_c, time_llm_metrics$rmse, time_llm_metrics$sign_mismatch)
-  
+
 
   patch_tst_metrics <- load_nf_metric(target_var, h, "PatchTST")
   res_c <- c(res_c, patch_tst_metrics$rmse, patch_tst_metrics$sign_mismatch)
@@ -258,7 +258,7 @@ colnames(LDA_sign) <- c('AR','RW','AVE','AR+unem','LDA','LDA+unem','LLM+LDA','LL
 
 
 
-### Prediction interval with LDA embedding
+
 ```{r}
 h_pi <- seq(8,15,1)
 
@@ -269,10 +269,10 @@ len_m <- matrix(NA, nrow = length(h_pi), ncol = 10)
 
 for(k in seq_along(h_pi)){
   h <- h_pi[k]
-  
+
   test_idx <- (length(y) - h + 1):length(y)
   obs_idx <- setdiff(seq_along(y), test_idx)
-  
+
 
   ar_base <- auto.arima(y[obs_idx], max.q = 0, D = 0, seasonal = FALSE, allowmean = FALSE, allowdrift = FALSE)
   p1 <- max(1, ar_base$arma[1])
@@ -281,7 +281,7 @@ for(k in seq_along(h_pi)){
   ar_interval <- cbind(ar_predictions_fit$lower[,2], ar_predictions_fit$upper[,2])
   len_m[k, 1] <- mean(as.numeric(ar_interval[,2] - ar_interval[,1]))
   coverage_m[k,1] <- mean(mapply(check_coverage, split(ar_interval, row(ar_interval)), y[test_idx]))
-  
+
 
   if (has_unem) {
     ar_unem_fit <- Arima(y[obs_idx], order = c(p1,0,0), xreg = unem[obs_idx], include.mean = FALSE)
@@ -293,31 +293,31 @@ for(k in seq_along(h_pi)){
     len_m[k,2] <- NA
     coverage_m[k,2] <- NA
   }
-  
- 
-  
 
-  
+
+
+
+
   arx_lda_fit <- Arima(y[obs_idx], order = c(p1,0,0), xreg = X_m[obs_idx,strong_idx,drop = FALSE], include.mean = FALSE)
   arx_lda_predictions_fit <- forecast(arx_lda_fit, h = length(test_idx), xreg = X_m[test_idx,strong_idx,drop = FALSE])
   arx_lda_interval <- cbind(arx_lda_predictions_fit$lower[,2], arx_lda_predictions_fit$upper[,2])
-  
+
   len_m[k,3] <- mean(arx_lda_interval[,2] - arx_lda_interval[,1])
   coverage_m[k,3] <- mean(mapply(check_coverage, split(arx_lda_interval, row(arx_lda_interval)), y[test_idx]))
-  
+
 
   if (has_unem) {
     arx_lda_un_fit <- Arima(y[obs_idx], order = c(p1,0,0), xreg = cbind(X_m[obs_idx,strong_idx, drop=FALSE], unem[obs_idx]), include.mean = FALSE)
     arx_lda_un_predictions_fit <- forecast(arx_lda_un_fit, h = length(test_idx), xreg = cbind(X_m[test_idx,strong_idx,drop=FALSE], unem[test_idx]))
     arx_lda_un_interval <- cbind(arx_lda_un_predictions_fit$lower[,2], arx_lda_un_predictions_fit$upper[,2])
-    
+
     len_m[k,4] <- mean(arx_lda_un_interval[,2] - arx_lda_un_interval[,1])
     coverage_m[k,4] <- mean(mapply(check_coverage, split(arx_lda_un_interval, row(arx_lda_un_interval)), y[test_idx]))
   } else {
     len_m[k,4] <- NA
     coverage_m[k,4] <- NA
   }
-  
+
 
   p1=ar_base$arma[1]
   p2=1
@@ -325,17 +325,17 @@ for(k in seq_along(h_pi)){
   powered_lda_interval <- powered_lda_res$interval
   len_m[k,5] <- mean(powered_lda_interval[,2] - powered_lda_interval[,1])
   coverage_m[k,5] <- mean(mapply(check_coverage, split(powered_lda_interval, row(powered_lda_interval)), y[test_idx]))
-  
+
 
   boot_lda_res <- LLM_TS.BOOT(X_m, y, tilde_y_m, p1, p2, obs_idx, test_idx, strong_idx, h, B = 2000)
   boot_lda_interval <- boot_lda_res$interval
   len_m[k,6] <- mean(boot_lda_interval[,2] - boot_lda_interval[,1])
   coverage_m[k,6] <- mean(mapply(check_coverage, split(boot_lda_interval, row(boot_lda_interval)), y[test_idx]))
-  
+
 
 
   if (has_unem) {
-    powered_res <- LLM_TS.BJ(cbind(X_m,unem), y, tilde_y_m, p1, p2, obs_idx, test_idx, 
+    powered_res <- LLM_TS.BJ(cbind(X_m,unem), y, tilde_y_m, p1, p2, obs_idx, test_idx,
                               c(strong_idx,ncol(X_m)+1), h)
     powered_interval <- powered_res$interval
     len_m[k,7] <- mean(powered_interval[,2] - powered_interval[,1])
@@ -344,7 +344,7 @@ for(k in seq_along(h_pi)){
     len_m[k,7] <- NA
     coverage_m[k,7] <- NA
   }
-  
+
 
 
   if (has_unem) {
@@ -387,9 +387,9 @@ LDA_len <- len_m
 colnames(LDA_len) <- c('AR','AR+unem','LDA', 'LDA+unem', 'LLM+LDA(BJ)','LLM+LDA(Boot)','LLM+LDA+unem(BJ)','LLM+LDA+unem(Boot)','LLM+LDA(SPI)','LLM+LDA+unem(SPI)')
 ```
 
-## Prediction results
 
-### Results without unemployment rate 
+
+
 ```{r}
 MSE_without_unem <- LDA_mse[,c('AR','RW','AVE','LDA','LLM+LDA','TimeLLM','PatchTST')]
 rMSE_without_unem <- sweep(MSE_without_unem, 1, MSE_without_unem[,'AR',drop=FALSE], "/")
@@ -408,7 +408,7 @@ knitr::kable(rSign_without_unem,col.names = c('H','AR','RW','AVE','LDA','LLM+LDA
 colMeans(rSign_without_unem[,-1, drop = FALSE])
 ```
 
-### Results with unemployment rate 
+
 ```{r}
 MSE_with_unem <- LDA_mse[,c('AR+unem','RW','AVE','LDA+unem','LLM+LDA+unem')]
 rMSE_with_unem <- sweep(MSE_with_unem, 1, MSE_with_unem[,'AR+unem',drop=FALSE], "/")
@@ -427,9 +427,9 @@ colMeans(rSign_with_unem[,-1, drop = FALSE])
 ```
 
 
-## Inference results
 
-### Results without unemployment rate 
+
+
 ```{r}
 Cov_without_unem <- LDA_cov[,c('AR','LDA','LLM+LDA(BJ)','LLM+LDA(Boot)','LLM+LDA(SPI)')]
 Cov_without_unem <- cbind(h_pi, Cov_without_unem)
@@ -445,7 +445,7 @@ knitr::kable(Len_without_unem, col.names = c('H','AR','LDA','LLM+LDA(BJ)','LLM+L
 colMeans(Len_without_unem[,-1, drop = FALSE], na.rm = TRUE)
 ```
 
-### Results with unemployment rate 
+
 ```{r}
 Cov_with_unem <- LDA_cov[,c('AR+unem','LDA+unem','LLM+LDA+unem(BJ)','LLM+LDA+unem(Boot)','LLM+LDA+unem(SPI)')]
 Cov_with_unem <- cbind(h_pi, Cov_with_unem)
