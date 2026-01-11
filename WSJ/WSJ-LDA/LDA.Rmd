@@ -1,6 +1,5 @@
 ---
 title: "WSJ Data Analysis with LDA Embedding"
-date: "2025-12-22"
 author: "Yingying Fan, Jinchi Lv, Ao Sun and Yurou Wang"
 output:
   prettydoc::html_pretty:

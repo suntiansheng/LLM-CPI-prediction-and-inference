@@ -1,6 +1,5 @@
 ---
 title: "Real Data Analysis"
-date: "2025-06-09"
 author: "Yingying Fan, Jinchi Lv, Ao Sun and Yurou Wang"
 output:
   prettydoc::html_pretty:
